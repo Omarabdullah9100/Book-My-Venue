@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next"
 import { Inter, Playfair_Display } from "next/font/google"
-import { Header } from "@/components/layout/header"
-import { Footer } from "@/components/layout/footer"
+import { SiteShell } from "@/components/layout/site-shell"
 import { ToastProvider } from "@/components/ui/toast"
 import { t } from "@/lib/strings"
 import "./globals.css"
@@ -38,11 +37,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           Skip to content
         </a>
         <ToastProvider>
-          <Header />
-          <main id="main" className="flex-1">
-            {children}
-          </main>
-          <Footer />
+          <SiteShell>{children}</SiteShell>
         </ToastProvider>
       </body>
     </html>

@@ -1,5 +1,8 @@
+"use client"
+
 import Image from "next/image"
 import Link from "next/link"
+import { useState } from "react"
 import { Heart, MapPin, ShieldCheck, Star } from "lucide-react"
 import { cn } from "@/lib/cn"
 import { formatINR, type Paise } from "@/lib/money"
@@ -22,6 +25,7 @@ export type VenueCardData = {
 
 export function VenueCard({ venue, wide = false }: { venue: VenueCardData; wide?: boolean }) {
   const href = `/venues/${venue.slug}`
+  const [saved, setSaved] = useState(false)
   return (
     <article
       className={cn(
@@ -37,9 +41,15 @@ export function VenueCard({ venue, wide = false }: { venue: VenueCardData; wide?
           sizes="(min-width: 1024px) 380px, 100vw"
           className="object-cover transition duration-500 group-hover:scale-[1.025] motion-reduce:transition-none"
         />
-        <span className="text-navy absolute top-3 right-3 grid size-11 place-items-center rounded-full bg-white/90">
-          <Heart size={18} aria-hidden="true" />
-        </span>
+        <button
+          type="button"
+          aria-label={saved ? `Remove ${venue.name} from saved venues` : `Save ${venue.name}`}
+          aria-pressed={saved}
+          onClick={() => setSaved((value) => !value)}
+          className={`text-navy absolute top-3 right-3 z-10 grid size-11 place-items-center rounded-full bg-white/90 transition ${saved ? "text-red" : "hover:bg-white"}`}
+        >
+          <Heart size={18} fill={saved ? "currentColor" : "none"} aria-hidden="true" />
+        </button>
         {venue.instant && (
           <span className="bg-amber text-navy-deep absolute bottom-3 left-3 rounded-full px-3 py-1 text-xs font-bold">
             {t.venue.instantBooking}

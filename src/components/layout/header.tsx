@@ -22,7 +22,7 @@ export function Header() {
 
   return (
     <header className="border-line bg-cream/90 sticky top-0 z-40 border-b backdrop-blur">
-      <div className="container-page flex min-h-[72px] items-center justify-between gap-4">
+      <div className="container-page flex min-h-[64px] items-center justify-between gap-4">
         <Logo />
         <nav aria-label={t.nav.main} className="hidden items-center gap-1 md:flex">
           {navItems.map((item) => (
@@ -30,14 +30,17 @@ export function Header() {
               key={item.href}
               href={item.href}
               aria-current={isActive(item.href) ? "page" : undefined}
-              className={buttonClass("ghost", cn(isActive(item.href) && "bg-navy-soft"))}
+              className={cn(
+                "rounded-full px-3 py-1.5 text-[13px] font-semibold transition",
+                isActive(item.href) ? "text-navy" : "text-navy/80 hover:bg-navy-soft",
+              )}
             >
               {item.label}
             </Link>
           ))}
         </nav>
         <div className="flex items-center gap-1">
-          <ButtonLink href="/login" variant="secondary">
+          <ButtonLink href="/login" variant="secondary" className="px-5 py-2 text-[13px]">
             {t.nav.login}
           </ButtonLink>
           <button
