@@ -1,0 +1,435 @@
+// Idam data model. All money is stored as integer paise.
+// Deferred features (Idam Split, vendor bundles, smart pricing, institutional) have NO tables yet;
+// see docs/ROADMAP.md for the planned extension points.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────────── Enums ─────────────
+
+enum Role {
+  CUSTOMER
+  OWNER
+  ADMIN
+}
+
+enum VenueStatus {
+  DRAFT
+  PENDING
+  VERIFIED
+  SUSPENDED
+}
+
+enum MediaType {
+  PHOTO
+  VIDEO
+}
+
+enum SlotType {
+  HOURLY
+  HALF_DAY
+  FULL_DAY
+}
+
+/// RELEASED is added to the spec's HELD|BOOKED|BLOCKED so expired/cancelled rows stay auditable
+/// while dropping out of the overlap-exclusion constraint.
+enum SlotStatus {
+  HELD
+  BOOKED
+  BLOCKED
+  RELEASED
+}
+
+enum SlotSource {
+  PLATFORM
+  OFFLINE
+}
+
+enum BookingStatus {
+  PENDING
+  APPROVED
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  REJECTED
+  EXPIRED
+}
+
+enum PaymentType {
+  DEPOSIT
+  BALANCE
+  REFUND
+}
+
+enum PaymentStatus {
+  CREATED
+  CAPTURED
+  FAILED
+  REFUNDED
+}
+
+enum SettlementStatus {
+  PENDING
+  SETTLED
+}
+
+enum DisputeStatus {
+  OPEN
+  RESOLVED
+  REJECTED
+}
+
+enum NotificationType {
+  BOOKING_REQUESTED
+  BOOKING_APPROVED
+  BOOKING_REJECTED
+  BOOKING_CONFIRMED
+  BOOKING_CANCELLED
+  BOOKING_EXPIRED
+  PAYMENT_RECEIVED
+  PAYMENT_FAILED
+  REMINDER_7_DAY
+  REMINDER_1_DAY
+  REVIEW_REQUEST
+  OWNER_CALENDAR_CHECK
+  VENUE_VERIFIED
+  VENUE_REJECTED
+}
+
+// ───────────── Identity ─────────────
+
+model User {
+  id        String   @id @default(cuid())
+  name      String?
+  phone     String?  @unique
+  email     String?  @unique
+  image     String?
+  role      Role     @default(CUSTOMER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  venues        Venue[]
+  bookings      Booking[]
+  savedVenues   SavedVenue[]
+  notifications Notification[]
+  disputes      Dispute[]
+  auditLogs     AuditLog[]
+
+  @@index([role])
+}
+
+// ───────────── Catalogue ─────────────
+
+model CancellationPolicy {
+  id    String @id @default(cuid())
+  name  String @unique
+  /// [{ "daysBefore": 30, "refundPercent": 100 }, ...] sorted by daysBefore desc
+  tiers Json
+  venues Venue[]
+}
+
+model Venue {
+  id                   String      @id @default(cuid())
+  ownerId              String
+  name                 String
+  slug                 String      @unique
+  description          String      @default("")
+  address              String      @default("")
+  area                 String      @default("")
+  city                 String
+  district             String
+  lat                  Float?
+  lng                  Float?
+  status               VenueStatus @default(DRAFT)
+  verifiedAt           DateTime?
+  rules                String      @default("")
+  cancellationPolicyId String?
+  /// true = instant booking, false = request-to-book (owner has 24h)
+  instantBooking       Boolean     @default(false)
+  venueType            String      @default("Event venue")
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+
+  owner              User                @relation(fields: [ownerId], references: [id])
+  cancellationPolicy CancellationPolicy? @relation(fields: [cancellationPolicyId], references: [id])
+  spaces             Space[]
+  amenities          VenueAmenity[]
+  media              Media[]
+  savedBy            SavedVenue[]
+  verificationDocs   VerificationDocument[]
+
+  @@index([city, status])
+  @@index([status])
+  @@index([ownerId])
+}
+
+model VerificationDocument {
+  id        String   @id @default(cuid())
+  venueId   String
+  label     String
+  url       String
+  createdAt DateTime @default(now())
+  venue     Venue    @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
+  @@index([venueId])
+}
+
+model Space {
+  id           String  @id @default(cuid())
+  venueId      String
+  name         String
+  capacityMin  Int     @default(1)
+  capacityMax  Int
+  floorPlanUrl String?
+
+  venue    Venue            @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  media    Media[]
+  pricing  PricingRule[]
+  extras   PriceExtra[]
+  slots    AvailabilitySlot[]
+  bookings Booking[]
+
+  @@index([venueId])
+}
+
+model Amenity {
+  id    String         @id @default(cuid())
+  key   String         @unique
+  label String
+  venues VenueAmenity[]
+}
+
+model VenueAmenity {
+  venueId   String
+  amenityId String
+  venue     Venue   @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  amenity   Amenity @relation(fields: [amenityId], references: [id], onDelete: Cascade)
+
+  @@id([venueId, amenityId])
+}
+
+model Media {
+  id      String    @id @default(cuid())
+  venueId String
+  spaceId String?
+  type    MediaType @default(PHOTO)
+  url     String
+  alt     String    @default("")
+  order   Int       @default(0)
+
+  venue Venue  @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  space Space? @relation(fields: [spaceId], references: [id], onDelete: SetNull)
+
+  @@index([venueId, order])
+}
+
+model PricingRule {
+  id        String   @id @default(cuid())
+  spaceId   String
+  slotType  SlotType
+  /// paise
+  basePrice Int
+  /// { "2026-12-25": 6500000 } — date-specific absolute price in paise
+  dateOverrides     Json @default("{}")
+  /// [{ "from": "2026-11-01", "to": "2027-01-31", "multiplierPercent": 125 }]
+  seasonalOverrides Json @default("[]")
+
+  space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+
+  @@unique([spaceId, slotType])
+}
+
+model PriceExtra {
+  id                String  @id @default(cuid())
+  spaceId           String
+  key               String
+  label             String
+  /// paise
+  amount            Int
+  includedByDefault Boolean @default(false)
+
+  space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+
+  @@unique([spaceId, key])
+}
+
+// ───────────── Availability and bookings ─────────────
+
+/// Overlap safety: see prisma/migrations/*_availability_exclusion — a Postgres EXCLUDE constraint
+/// forbids overlapping [startsAt, endsAt) ranges per space while status is HELD, BOOKED or BLOCKED.
+model AvailabilitySlot {
+  id            String     @id @default(cuid())
+  spaceId       String
+  /// Local (Asia/Kolkata) calendar date, used for indexing and calendar views
+  date          DateTime   @db.Date
+  startsAt      DateTime
+  endsAt        DateTime
+  status        SlotStatus
+  source        SlotSource @default(PLATFORM)
+  bookingId     String?    @unique
+  holdExpiresAt DateTime?
+  note          String?
+  createdAt     DateTime   @default(now())
+
+  space   Space    @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  booking Booking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+
+  @@index([spaceId, date])
+  @@index([status, holdExpiresAt])
+}
+
+model Booking {
+  id               String        @id @default(cuid())
+  /// Human-friendly reference shown to users, e.g. IDM-7K2P9Q
+  reference        String        @unique
+  customerId       String
+  spaceId          String
+  eventType        String
+  date             DateTime      @db.Date
+  slotType         SlotType
+  startsAt         DateTime
+  endsAt           DateTime
+  guests           Int
+  status           BookingStatus @default(PENDING)
+  /// All amounts are integer paise
+  totalAmount      Int
+  depositAmount    Int
+  balanceDue       Int
+  commissionAmount Int
+  commissionPercent Int
+  depositPercent    Int
+  /// Snapshot of itemised pricing at booking time
+  priceBreakdown   Json
+  /// Snapshot of the cancellation tiers at booking time
+  policySnapshot   Json
+  instantBooking   Boolean       @default(false)
+  specialRequests  String?
+  holdExpiresAt    DateTime?
+  /// Request-to-book: owner must respond by this time or the booking becomes EXPIRED
+  respondBy        DateTime?
+  rejectionReason  String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  customer User               @relation(fields: [customerId], references: [id])
+  space    Space              @relation(fields: [spaceId], references: [id])
+  slot     AvailabilitySlot?
+  payments Payment[]
+  review   Review?
+  disputes Dispute[]
+
+  @@index([customerId, status])
+  @@index([spaceId, date])
+  @@index([status, holdExpiresAt])
+  @@index([status, respondBy])
+}
+
+model Payment {
+  id               String           @id @default(cuid())
+  bookingId        String
+  /// Razorpay order id / payment id / refund id
+  gatewayRef       String           @unique
+  gatewayPaymentId String?
+  /// paise
+  amount           Int
+  type             PaymentType
+  status           PaymentStatus    @default(CREATED)
+  settlementStatus SettlementStatus @default(PENDING)
+  failureReason    String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  booking Booking @relation(fields: [bookingId], references: [id])
+
+  @@index([bookingId])
+}
+
+/// One row per processed gateway webhook event, so handlers are idempotent.
+model WebhookEvent {
+  id          String   @id @default(cuid())
+  provider    String
+  eventId     String
+  type        String
+  processedAt DateTime @default(now())
+
+  @@unique([provider, eventId])
+}
+
+// ───────────── Engagement ─────────────
+
+model Review {
+  id            String   @id @default(cuid())
+  bookingId     String   @unique
+  rating        Int
+  comment       String   @default("")
+  ownerResponse String?
+  createdAt     DateTime @default(now())
+
+  booking Booking @relation(fields: [bookingId], references: [id])
+}
+
+model SavedVenue {
+  userId    String
+  venueId   String
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  venue Venue @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
+  @@id([userId, venueId])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  payload   Json             @default("{}")
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+}
+
+model Dispute {
+  id         String        @id @default(cuid())
+  bookingId  String
+  raisedById String
+  reason     String        @default("")
+  status     DisputeStatus @default(OPEN)
+  resolution String?
+  createdAt  DateTime      @default(now())
+
+  booking  Booking @relation(fields: [bookingId], references: [id])
+  raisedBy User    @relation(fields: [raisedById], references: [id])
+
+  @@index([status])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  action    String
+  entity    String
+  entityId  String
+  meta      Json     @default("{}")
+  createdAt DateTime @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id])
+
+  @@index([entity, entityId])
+}
+
+/// Key/value platform settings, e.g. commissionPercent=8, depositPercent=20
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}

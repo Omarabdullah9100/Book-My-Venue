@@ -1,0 +1,92 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens, extracted from the Figma Make prototype (src/index.css).
+ * Deviation: --color-muted is darkened from #667382 to #5a6877 so body text on cream passes WCAG AA (4.5:1).
+ * Amber is used as a background with navy-deep text only (amber text on white fails AA).
+ */
+@theme {
+  --color-navy: #1f3a5f;
+  --color-navy-deep: #142b49;
+  --color-navy-soft: #edf1f6;
+  --color-amber: #e9a23b;
+  --color-amber-soft: #fff4df;
+  --color-amber-ink: #8a550a;
+  --color-cream: #f8f6f2;
+  --color-green: #2e7d5b;
+  --color-green-ink: #256a4c;
+  --color-green-soft: #e7f4ee;
+  --color-red: #b94343;
+  --color-red-soft: #fbeaea;
+  --color-ink: #1d2b3a;
+  --color-muted: #5a6877;
+  --color-line: #dfe4e8;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-playfair), Georgia, serif;
+
+  --radius-control: 12px;
+  --radius-field: 11px;
+  --radius-card: 16px;
+
+  --shadow-lift: 0 16px 50px rgba(31, 58, 95, 0.1);
+  --shadow-button: 0 7px 18px rgba(31, 58, 95, 0.18);
+
+  --container-page: 1180px;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    min-width: 320px;
+    background: var(--color-cream);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-synthesis: none;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1,
+  h2 {
+    font-family: var(--font-display);
+    color: var(--color-navy-deep);
+    line-height: 1.08;
+  }
+  h1 {
+    font-size: clamp(2.5rem, 6vw, 5.75rem);
+    font-weight: 700;
+  }
+  h2 {
+    font-size: clamp(2rem, 3vw, 3.25rem);
+    font-weight: 700;
+  }
+  h3 {
+    color: var(--color-navy-deep);
+  }
+  button {
+    cursor: pointer;
+  }
+  :focus-visible {
+    outline: 3px solid rgb(233 162 59 / 0.6);
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  .container-page {
+    width: min(var(--container-page), calc(100% - 40px));
+    margin-inline: auto;
+  }
+}
