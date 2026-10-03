@@ -24,6 +24,16 @@ npm run db:seed
 npm run dev
 ```
 
+### Demo authentication
+
+Customer and owner sign-in use the development OTP `123456` with a valid Indian
+mobile number. Demo OTP authentication is disabled in production unless
+`ALLOW_MOCK_AUTH=true` is set.
+
+Admin sign-in is available at `/admin/login` and uses the `ADMIN_EMAIL` and
+`ADMIN_PASSWORD` environment variables. Set `AUTH_SECRET` to a random value in
+production; it signs the expiring, role-bearing session cookie.
+
 ## Scripts
 
 | Command            | Purpose                                    |

@@ -1,25 +1,35 @@
 import { NextRequest, NextResponse } from "next/server"
-import { parseSessionCookie } from "@/lib/auth"
+import { SESSION_COOKIE, parseSessionCookie } from "@/lib/auth"
+
+/** Sign-in pages stay reachable without a session. */
+const OPEN_PATHS = ["/login", "/signup", "/owner/login", "/admin/login"]
+
+const isOpen = (pathname: string) =>
+  OPEN_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`))
+
+function toLogin(request: NextRequest, loginPath: string) {
+  const url = new URL(loginPath, request.url)
+  url.searchParams.set("next", `${request.nextUrl.pathname}${request.nextUrl.search}`)
+  return NextResponse.redirect(url)
+}
 
 export function proxy(request: NextRequest) {
-  const pathname = request.nextUrl.pathname
-  const session = parseSessionCookie(request.cookies.get("idam_session")?.value ?? null)
+  const { pathname } = request.nextUrl
+  if (isOpen(pathname)) return NextResponse.next()
 
-  if (pathname.startsWith("/owner/login") || pathname.startsWith("/login") || pathname.startsWith("/signup")) {
-    return NextResponse.next()
-  }
+  const role = parseSessionCookie(request.cookies.get(SESSION_COOKIE)?.value ?? null)?.role
 
-  if (pathname.startsWith("/host") && (!session || !["OWNER", "ADMIN"].includes(session.role))) {
-    return NextResponse.redirect(new URL("/owner/login", request.url))
-  }
-
-  if (pathname.startsWith("/account") && (!session || session.role !== "CUSTOMER")) {
-    return NextResponse.redirect(new URL("/login", request.url))
+  if (pathname.startsWith("/admin")) {
+    if (role !== "ADMIN") return toLogin(request, "/admin/login")
+  } else if (pathname.startsWith("/host")) {
+    if (role !== "OWNER" && role !== "ADMIN") return toLogin(request, "/owner/login")
+  } else if (pathname.startsWith("/account") || /^\/venues\/[^/]+\/book\/?$/.test(pathname)) {
+    if (role !== "CUSTOMER") return toLogin(request, "/login")
   }
 
   return NextResponse.next()
 }
 
 export const config = {
-  matcher: ["/host/:path*", "/account/:path*", "/owner/login", "/login", "/signup"],
+  matcher: ["/admin/:path*", "/host/:path*", "/account/:path*", "/venues/:slug/book"],
 }
